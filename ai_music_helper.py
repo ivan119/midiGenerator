@@ -2,16 +2,26 @@ import os
 import json
 from dotenv import load_dotenv
 from openai import OpenAI
+import requests
 
 load_dotenv()
 
 class AIMusicHelper:
     def __init__(self):
         self.api_key = os.getenv('KLUSTER_AI_API_KEY')
+        
+        # Use the OpenAI client with Kluster AI's base URL
         self.client = OpenAI(
             api_key=self.api_key,
             base_url="https://api.kluster.ai/v1"
         )
+        
+        # Fallback to direct API requests if needed
+        self.headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+        self.api_url = "https://api.kluster.ai/v1/chat/completions"
         
     def analyze_mood(self, description):
         """Analyze the user's description and return musical parameters."""
@@ -48,16 +58,37 @@ class AIMusicHelper:
         """
         
         try:
-            completion = self.client.chat.completions.create(
-                model="klusterai/Meta-Llama-3.1-8B-Instruct-Turbo",
-                messages=[
-                    {"role": "user", "content": prompt}
-                ]
-            )
+            # Try first with the OpenAI client
+            try:
+                completion = self.client.chat.completions.create(
+                    model="meta-llama-3-8b-instruct",  # Updated model name
+                    messages=[
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.7
+                )
+                
+                # Extract the content from the response
+                content = completion.choices[0].message.content
+                
+            except Exception as client_error:
+                print(f"OpenAI client error: {str(client_error)}")
+                
+                # Fall back to direct API request
+                data = {
+                    "model": "meta-llama-3-8b-instruct",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.7
+                }
+                
+                response = requests.post(self.api_url, headers=self.headers, json=data)
+                response.raise_for_status()
+                
+                # Parse the API response
+                result = response.json()
+                content = result.get('choices', [{}])[0].get('message', {}).get('content', '{}')
             
-            # Extract the content from the response
-            content = completion.choices[0].message.content
-            
+            # Process the content
             try:
                 # Try to parse the JSON response
                 params = json.loads(content)
@@ -70,37 +101,29 @@ class AIMusicHelper:
                         params = json.loads(json_match.group(1))
                     except:
                         # If all parsing fails, return default values
-                        params = {
-                            "key": 60,
-                            "scale": "minor",
-                            "bpm": 140,
-                            "duration": 8,
-                            "lead_style": "melodic",
-                            "pad_style": "warm",
-                            "bass_style": "punchy",
-                            "drum_style": "energetic",
-                            "energy_level": 7,
-                            "atmosphere": "uplifting",
-                            "explanation": "Default parameters for classic trance"
-                        }
+                        params = self._get_default_params()
                 else:
                     # Default values if JSON can't be found
-                    params = {
-                        "key": 60,
-                        "scale": "minor",
-                        "bpm": 140,
-                        "duration": 8,
-                        "lead_style": "melodic",
-                        "pad_style": "warm",
-                        "bass_style": "punchy",
-                        "drum_style": "energetic",
-                        "energy_level": 7,
-                        "atmosphere": "uplifting",
-                        "explanation": "Default parameters for classic trance"
-                    }
+                    params = self._get_default_params()
             
             return params
             
         except Exception as e:
             print(f"Error in AI analysis: {str(e)}")
-            return None 
+            return self._get_default_params()
+            
+    def _get_default_params(self):
+        """Return default parameters for classic trance."""
+        return {
+            "key": 60,
+            "scale": "minor",
+            "bpm": 140,
+            "duration": 8,
+            "lead_style": "melodic",
+            "pad_style": "warm",
+            "bass_style": "punchy",
+            "drum_style": "energetic",
+            "energy_level": 7,
+            "atmosphere": "uplifting",
+            "explanation": "Default parameters for classic trance"
+        } 

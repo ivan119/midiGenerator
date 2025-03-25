@@ -2,6 +2,7 @@ import streamlit as st
 from trance_generator import TranceGenerator
 from ai_music_helper import AIMusicHelper
 import os
+import traceback
 
 # Set page config
 st.set_page_config(
@@ -45,6 +46,13 @@ st.markdown("""
         border-radius: 8px;
         margin: 10px 0;
     }
+    .error-message {
+        background-color: #2E1E1E;
+        color: #FFAAAA;
+        padding: 10px;
+        border-radius: 5px;
+        margin: 10px 0;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -61,43 +69,62 @@ st.markdown("""
     - "Make a euphoric, classic trance track"
 """)
 
+# Check if API key is set
+api_key = os.getenv('KLUSTER_AI_API_KEY')
+if not api_key:
+    st.warning("⚠️ Kluster AI API key not found! AI features will use default parameters.")
+
 user_description = st.text_area(
     "Your description:",
     height=100
 )
 
 if st.button("🎵 Generate from Description"):
-    try:
-        with st.spinner("Analyzing your description..."):
-            ai_helper = AIMusicHelper()
-            params = ai_helper.analyze_mood(user_description)
-            
-            if params:
-                # Display AI analysis in a nice format
-                st.markdown("### 🎯 AI Analysis")
-                st.markdown(f"""
-                    <div class="ai-suggestion">
-                        <p><strong>Atmosphere:</strong> {params['atmosphere']}</p>
-                        <p><strong>Energy Level:</strong> {params['energy_level']}/10</p>
-                        <p><strong>Explanation:</strong> {params['explanation']}</p>
-                    </div>
-                """, unsafe_allow_html=True)
+    if not user_description.strip():
+        st.warning("Please enter a description first!")
+    else:
+        try:
+            with st.spinner("Analyzing your description..."):
+                ai_helper = AIMusicHelper()
+                params = ai_helper.analyze_mood(user_description)
                 
-                # Update the UI with AI suggestions
-                st.session_state.key = params["key"]
-                st.session_state.scale = params["scale"]
-                st.session_state.bpm = params["bpm"]
-                st.session_state.duration = params["duration"]
-                st.session_state.lead_style = params["lead_style"]
-                st.session_state.pad_style = params["pad_style"]
-                st.session_state.bass_style = params["bass_style"]
-                st.session_state.drum_style = params["drum_style"]
-                
-                st.success("🎉 AI has analyzed your description!")
-            else:
-                st.error("❌ Could not analyze description. Please try again.")
-    except Exception as e:
-        st.error(f"❌ Error: {str(e)}")
+                if params:
+                    # Display AI analysis in a nice format
+                    st.markdown("### 🎯 AI Analysis")
+                    st.markdown(f"""
+                        <div class="ai-suggestion">
+                            <p><strong>Atmosphere:</strong> {params.get('atmosphere', 'uplifting')}</p>
+                            <p><strong>Energy Level:</strong> {params.get('energy_level', 7)}/10</p>
+                            <p><strong>Explanation:</strong> {params.get('explanation', 'Default trance parameters')}</p>
+                        </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Update the UI with AI suggestions
+                    st.session_state.key = params.get('key', 60)
+                    st.session_state.scale = params.get('scale', 'minor')
+                    st.session_state.bpm = params.get('bpm', 140)
+                    st.session_state.duration = params.get('duration', 8)
+                    st.session_state.lead_style = params.get('lead_style', 'melodic')
+                    st.session_state.pad_style = params.get('pad_style', 'warm')
+                    st.session_state.bass_style = params.get('bass_style', 'punchy')
+                    st.session_state.drum_style = params.get('drum_style', 'energetic')
+                    
+                    st.success("🎉 AI has analyzed your description!")
+                else:
+                    st.warning("AI couldn't analyze the description. Using default parameters instead.")
+        except Exception as e:
+            st.error("❌ AI processing error")
+            st.markdown(f"""
+                <div class="error-message">
+                    <p>The AI analysis encountered an error, but default parameters will be used.</p>
+                    <p><small>Error details: {str(e)}</small></p>
+                </div>
+            """, unsafe_allow_html=True)
+            # Still update with defaults for graceful degradation
+            st.session_state.key = 60
+            st.session_state.scale = 'minor'
+            st.session_state.bpm = 140
+            st.session_state.duration = 8
 
 # Main controls
 st.subheader("🎼 Basic Settings")
@@ -163,6 +190,12 @@ if st.button("🎵 Generate MIDI Track"):
             
     except Exception as e:
         st.error(f"❌ Error: {str(e)}")
+        st.markdown(f"""
+            <div class="error-message">
+                <p>Details: {str(e)}</p>
+                <p><small>{traceback.format_exc()}</small></p>
+            </div>
+        """, unsafe_allow_html=True)
 
 # Simple tips
 st.markdown("---")
